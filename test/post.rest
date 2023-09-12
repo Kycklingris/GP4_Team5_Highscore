@@ -1,0 +1,8 @@
+POST https://gp1_highscore.smorsoft.com/highscore 
+content-type: application/json
+
+{
+	"score": 110,
+	"name": "foo",
+	"version": "bar"
+}
