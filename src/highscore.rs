@@ -4,11 +4,20 @@ use rusqlite::Result;
 
 use serde::{Deserialize, Serialize};
 
+#[repr(C)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct GhostLocation {
+	pub time: f32,
+	pub location: [f32; 3],
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Highscore {
-	pub score: u32,
+	pub level: String,
 	pub name: String,
-	pub version: String,
+	pub score: i32,
+	pub time: f32,
+	pub ghost: Vec<GhostLocation>,
 }
 
 pub struct Highscores {

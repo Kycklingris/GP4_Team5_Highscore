@@ -1,11 +1,12 @@
 use std::sync::RwLock;
 
-use actix_web::{body::BoxBody, http::header::ContentType, HttpRequest, HttpResponse, Responder};
 
-use rusqlite::{Connection, Result};
+use rusqlite::Connection;
 
 use crate::highscore::*;
-use serde::Serialize;
+
+
+use crate::helper::*;
 
 pub struct AppState {
 	pub tmp: RwLock<u32>,
@@ -24,9 +25,11 @@ impl AppState {
 
 		conn.execute(
 			"CREATE TABLE if not exists highscores (
-				version TEXT NOT NULL,
-				score 	INTEGER NOT NULL,
-				name 	TEXT NOT NULL	
+				level   TEXT NOT NULL,
+				name    TEXT NOT NULL,
+				score   INTEGER NOT NULL,
+				time    FLOAT NOT NULL,
+				ghost   LONGBLOB NOT NULL
 			)",
 			(),
 		)
@@ -37,87 +40,29 @@ impl AppState {
 		}
 	}
 
-	pub fn get_scores(&self) -> Highscores {
-		let tmp = self.tmp.read().expect("unable to lock the rwlock");
-
-		let mut highscores: Vec<Highscore> = Vec::new();
-		let conn =
-			Connection::open("./state/highscores.sqlite3").expect("Unable to read the database");
-		let mut stmt = conn
-			.prepare("SELECT version, score, name FROM highscores ORDER BY score DESC")
-			.expect("Unable to read the database");
-		let highscores_iter = stmt
-			.query_map([], |row| {
-				let highscore = Highscore {
-					version: row.get(0)?,
-					score: row.get(1)?,
-					name: row.get(2)?,
-				};
-				Ok(highscore)
-			})
-			.expect("Unable to map the database");
-
-		for row in highscores_iter {
-			match row {
-				Ok(r) => highscores.push(r),
-				Err(_) => {}
-			}
-		}
-
-		if *tmp == 1 {
-			drop(tmp)
-		}
-
-		highscores.into()
-	}
-
-	pub fn get_versioned_scores(&self, search_version: String) -> Highscores {
+	pub fn get_highscores(&self, search_level: String) -> Highscores {
 		let tmp = self.tmp.read().expect("unable to lock the rwlock");
 		let mut highscores: Vec<Highscore> = Vec::new();
 		let conn =
 			Connection::open("./state/highscores.sqlite3").expect("Unable to read the database");
 		let mut stmt = conn
-			.prepare("SELECT version, score, name FROM highscores WHERE version=:version; ORDER BY score DESC")
+			.prepare("SELECT level, name, score, time, ghost FROM highscores WHERE level=:level ORDER BY score DESC")
 			.expect("Unable to read the database");
 		let highscores_iter = stmt
-			.query_map(&[(":version", search_version.as_str())], |row| {
+			.query_map(&[(":level", search_level.as_str())], |row| {			
+				let ghost_data: Vec<u8> = row.get(4)?;
+				let mut ghost: Vec<GhostLocation> = Vec::with_capacity(ghost_data.len() / std::mem::size_of::<GhostLocation>());
+
+				for i in (0..ghost_data.len()).step_by(std::mem::size_of::<GhostLocation>()) {
+					ghost.push(unsafe { any_from_u8_slice::<GhostLocation>(&ghost_data[i..(i + std::mem::size_of::<GhostLocation>())]) });
+				}
+
 				let highscore = Highscore {
-					version: row.get(0)?,
-					score: row.get(1)?,
-					name: row.get(2)?,
-				};
-				Ok(highscore)
-			})
-			.expect("Unable to map the database");
-
-		for row in highscores_iter {
-			match row {
-				Ok(r) => highscores.push(r),
-				Err(_) => {}
-			}
-		}
-
-		if *tmp == 1 {
-			drop(tmp)
-		}
-
-		highscores.into()
-	}
-
-	pub fn get_top_ten(&self, search_version: String) -> Highscores {
-		let tmp = self.tmp.read().expect("unable to lock the rwlock");
-		let mut highscores: Vec<Highscore> = Vec::new();
-		let conn =
-			Connection::open("./state/highscores.sqlite3").expect("Unable to read the database");
-		let mut stmt = conn
-			.prepare("SELECT version, score, name FROM highscores WHERE version=:version ORDER BY score DESC")
-			.expect("Unable to read the database");
-		let highscores_iter = stmt
-			.query_map(&[(":version", search_version.as_str())], |row| {
-				let highscore = Highscore {
-					version: row.get(0)?,
-					score: row.get(1)?,
-					name: row.get(2)?,
+					level: row.get(0)?,
+					name: row.get(1)?,
+					score: row.get(2)?,
+					time: row.get(3)?,
+					ghost,
 				};
 				Ok(highscore)
 			})

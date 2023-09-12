@@ -4,54 +4,36 @@ use actix_web::{
 
 use rusqlite::Connection;
 
+mod helper;
+use helper::*;
+
 mod highscore;
 use highscore::*;
 
 mod state;
 use state::*;
 
-#[get("/highscores")]
-async fn get_highscores(req: actix_web::HttpRequest, data: web::Data<AppState>) -> impl Responder {
-	let highscores = data.get_scores();
-	let mut length = highscores.len();
-
-	if length > 50 {
-		length = 50;
-	}
-	let res_body = serde_json::to_string(&highscores[0..length]).unwrap();
-
-	HttpResponse::Ok()
-		.content_type(ContentType::json())
-		.body(res_body)
-}
-
-#[get("/highscores/{version}")]
-async fn get_highscores_version(
-	version: web::Path<String>,
-	_: actix_web::HttpRequest,
-	data: web::Data<AppState>,
+#[get("/highscores/{level}")]
+async fn get_highscores(
+	level: web::Path<String>,
+	_: actix_web::HttpRequest, data: web::Data<AppState>
 ) -> impl Responder {
-	let highscores = data.get_versioned_scores(version.to_string());
-	let mut length = highscores.len();
+	let highscores = data.get_highscores(level.to_string());
 
-	if length > 50 {
-		length = 50;
-	}
-
-	let res_body = serde_json::to_string(&highscores[0..length]).unwrap();
+	let res_body = serde_json::to_string(&highscores).unwrap();
 
 	HttpResponse::Ok()
 		.content_type(ContentType::json())
 		.body(res_body)
 }
 
-#[get("/top_ten/{version}")]
+#[get("/top_ten/{level}")]
 async fn get_top_ten(
-	version: web::Path<String>,
+	level: web::Path<String>,
 	_: actix_web::HttpRequest,
 	data: web::Data<AppState>,
 ) -> impl Responder {
-	let highscores = data.get_top_ten(version.to_string());
+	let highscores = data.get_highscores(level.to_string());
 	let mut length = highscores.len();
 
 	if length > 10 {
@@ -65,15 +47,23 @@ async fn get_top_ten(
 }
 
 #[post("/highscore")]
-async fn set_highscore(req: web::Json<Highscore>, data: web::Data<AppState>) -> impl Responder {
+async fn set_highscore(
+	req: web::Json<Highscore>, 
+	data: web::Data<AppState>
+) -> impl Responder {
 	let mut rwlock = data.tmp.write().expect("lock is poisoned");
 	let conn = Connection::open("./state/highscores.sqlite3").expect("Unable to read the database");
 
 	let highscore = req.0.to_owned();
 
+	let mut data: Vec<u8> = Vec::with_capacity(std::mem::size_of::<GhostLocation>() * highscore.ghost.len());
+	for location in highscore.ghost {
+		data.extend(unsafe { any_as_u8_slice(&location) });
+	}
+
 	conn.execute(
-		"INSERT INTO highscores (score, version, name) VALUES (?1, ?2, ?3)",
-		(&highscore.score, &highscore.version, &highscore.name),
+		"INSERT INTO highscores (level, name, score, time, ghost) VALUES (?1, ?2, ?3, ?4, ?5)",
+		(&highscore.level, &highscore.name, &highscore.score, &highscore.time, &data),
 	)
 	.expect("Unable to add row to database");
 
@@ -94,11 +84,12 @@ async fn main() -> std::io::Result<()> {
 			.app_data(web::Data::clone(&state))
 			.service(get_highscores)
 			.service(set_highscore)
-			.service(get_highscores_version)
 			.service(get_top_ten)
 	})
-	.bind(("0.0.0.0", 80))?
-	.bind(("0.0.0.0", 443))?
+	// .bind(("0.0.0.0", 80))?
+	// .bind(("0.0.0.0", 443))?
+	.bind(("127.0.0.1", 80))?
+	.bind(("127.0.0.1", 443))?
 	.run()
 	.await
 }
