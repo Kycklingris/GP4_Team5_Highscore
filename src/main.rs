@@ -86,10 +86,10 @@ async fn main() -> std::io::Result<()> {
 			.service(set_highscore)
 			.service(get_top_ten)
 	})
-	// .bind(("0.0.0.0", 80))?
-	// .bind(("0.0.0.0", 443))?
-	.bind(("127.0.0.1", 80))?
-	.bind(("127.0.0.1", 443))?
+	.bind(("0.0.0.0", 80))?
+	.bind(("0.0.0.0", 443))?
+	// .bind(("127.0.0.1", 80))?
+	// .bind(("127.0.0.1", 443))?
 	.run()
 	.await
 }
